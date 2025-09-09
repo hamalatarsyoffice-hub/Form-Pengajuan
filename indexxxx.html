@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Form Pengajuan Forum</title>
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/1828/1828911.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <style>
+    body { background: #f8f9fa; }
+    .bold-label { font-weight: bold; }
+    .table-responsive { margin-top: 20px; }
+    .center-title { text-align: center; font-weight: bold; font-size: 2rem; margin-bottom: 2rem; }
+    .card { box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 2rem; }
+    .input-popup { cursor: pointer; }
+    @media (max-width: 576px) {
+      .form-label, .bold-label { font-size: 1rem; }
+      .table th, .table td { font-size: 0.9rem; }
+      .center-title { font-size: 1.3rem; }
+    }
+    .table-allborder th, .table-allborder td {
+      border: 1px solid #dee2e6 !important;
+    }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="center-title">Form Pengajuan Forum</div>
+  <form id="mainForm">
+    <div class="card p-3">
+      <div class="mb-3">
+        <label class="form-label bold-label">Form Name</label>
+        <input type="text" class="form-control input-popup" id="formName" required readonly onclick="showInputPopup('formName')">
+      </div>
+      <div class="mb-3">
+        <label class="form-label bold-label">Form Date</label>
+        <input type="text" class="form-control input-popup" id="formDate" placeholder="dd-mm-yy" required pattern="\d{2}-\d{2}-\d{2}" readonly onclick="showDatePicker()">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Form Description</label>
+        <textarea class="form-control input-popup" id="formDesc" rows="2" readonly onclick="showInputPopup('formDesc')"></textarea>
+      </div>
+    </div>
+    <div id="tablesContainer"></div>
+    <div class="mt-3">
+      <button type="button" class="btn btn-success" onclick="addTable()">+ Tambah Table</button>
+    </div>
+    <div class="mt-4">
+      <button type="button" class="btn btn-primary" onclick="exportExcel()">Export ke Excel</button>
+    </div>
+  </form>
+</div>
+
+<!-- Input Popup Modal -->
+<div class="modal fade" id="inputModal" tabindex="-1" aria-labelledby="inputModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="inputModalLabel">Pilih Metode Input</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <button class="btn btn-outline-primary w-100 mb-2" id="btnManual">Ketik Manual</button>
+        <button class="btn btn-outline-success w-100" id="btnVoice">Input Suara</button>
+        <div id="manualInputBox" class="mt-3" style="display:none;">
+          <input type="text" class="form-control" id="manualInputField">
+          <button class="btn btn-primary mt-2 w-100" id="btnSaveManual">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let currentInputId = '';
+function showInputPopup(inputId) {
+  currentInputId = inputId;
+  document.getElementById('manualInputBox').style.display = 'none';
+  document.getElementById('manualInputField').value = '';
+  const modal = new bootstrap.Modal(document.getElementById('inputModal'));
+  modal.show();
+  document.getElementById('btnManual').onclick = function() {
+    document.getElementById('manualInputBox').style.display = 'block';
+    document.getElementById('manualInputField').focus();
+  };
+  document.getElementById('btnVoice').onclick = function() {
+    startVoiceInput(currentInputId);
+    modal.hide();
+  };
+  document.getElementById('btnSaveManual').onclick = function() {
+    let val = document.getElementById('manualInputField').value;
+    if(currentInputId.includes('tableName')) val = capitalizeWords(val);
+    document.getElementById(currentInputId).value = val;
+    modal.hide();
+  };
+}
+function startVoiceInput(inputId) {
+  if (!('webkitSpeechRecognition' in window)) {
+    alert('Browser tidak mendukung voice input');
+    return;
+  }
+  const recognition = new webkitSpeechRecognition();
+  recognition.lang = 'id-ID';
+  recognition.onresult = function(event) {
+    let result = event.results[0][0].transcript;
+    if(inputId.includes('tableName')) result = capitalizeWords(result);
+    document.getElementById(inputId).value = result;
+  };
+  recognition.start();
+}
+function capitalizeWords(str) {
+  return str.replace(/\b([a-zA-Z]{2,})\b/g, function(word) {
+    if (/^[A-Z]{2,}$/.test(word)) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+let tableCount = 0;
+function addTable() {
+  tableCount++;
+  const container = document.getElementById('tablesContainer');
+  const tableId = `table${tableCount}`;
+  const tableNameId = `tableName${tableCount}`;
+  const html = `
+    <div class="card p-3 mb-4">
+      <div class="mb-2">
+        <label class="form-label bold-label">Table Name</label>
+        <input type="text" class="form-control input-popup" id="${tableNameId}" readonly onclick="showInputPopup('${tableNameId}')">
+      </div>
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle" id="${tableId}">
+          <thead class="table-light">
+            <tr>
+              <th style="width:40px">No.</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Satuan</th>
+              <th>Harga Satuan</th>
+              <th>Harga Total</th>
+              <th>Beli ke</th>
+              <th style="width:60px">Aksi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button type="button" class="btn btn-success" onclick="addRow('${tableId}')">+ Tambah Baris</button>
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', html);
+  addRow(tableId);
+}
+function addRow(tableId) {
+  const table = document.getElementById(tableId);
+  const tbody = table.querySelector('tbody');
+  const rowCount = tbody.rows.length + 1;
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>${rowCount}</td>
+    <td><input type="text" class="form-control input-popup" id="${tableId}_desc${rowCount}" readonly onclick="showInputPopup('${tableId}_desc${rowCount}')"></td>
+    <td><input type="number" class="form-control input-popup" id="${tableId}_qty${rowCount}" min="1" readonly onclick="showInputPopup('${tableId}_qty${rowCount}')"></td>
+    <td><input type="text" class="form-control input-popup" id="${tableId}_satuan${rowCount}" readonly onclick="showInputPopup('${tableId}_satuan${rowCount}')"></td>
+    <td><input type="number" class="form-control input-popup" id="${tableId}_hargaSatuan${rowCount}" min="0" readonly onclick="showInputPopup('${tableId}_hargaSatuan${rowCount}')"></td>
+    <td><input type="number" class="form-control input-popup" id="${tableId}_hargaTotal${rowCount}" min="0" readonly disabled></td>
+    <td><input type="text" class="form-control input-popup" id="${tableId}_beliKe${rowCount}" readonly onclick="showInputPopup('${tableId}_beliKe${rowCount}')"></td>
+    <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRow(this, '${tableId}')">Hapus</button></td>
+  `;
+  tbody.appendChild(row);
+  updateRowNumbers(tableId);
+  // Hitung Harga Total otomatis dan tampilkan langsung di web
+  const qtyInput = row.querySelector(`#${tableId}_qty${rowCount}`);
+  const hargaSatuanInput = row.querySelector(`#${tableId}_hargaSatuan${rowCount}`);
+  qtyInput.oninput = hargaSatuanInput.oninput = function() {
+    const qty = parseFloat(qtyInput.value) || 0;
+    const harga = parseFloat(hargaSatuanInput.value) || 0;
+    row.querySelector(`#${tableId}_hargaTotal${rowCount}`).value = qty * harga;
+  };
+}
+function deleteRow(btn, tableId) {
+  btn.closest('tr').remove();
+  updateRowNumbers(tableId);
+}
+function updateRowNumbers(tableId) {
+  const table = document.getElementById(tableId);
+  const tbody = table.querySelector('tbody');
+  Array.from(tbody.rows).forEach((row, i) => {
+    row.cells[0].textContent = i + 1;
+  });
+}
+function showDatePicker() {
+  flatpickr(document.getElementById('formDate'), {
+    dateFormat: "d-m-y",
+    defaultDate: document.getElementById('formDate').value || undefined,
+    onClose: function(selectedDates, dateStr) {
+      document.getElementById('formDate').value = dateStr;
+    }
+  }).open();
+}
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+  const ws_data = [];
+  let startRow = 5;
+  ws_data[startRow] = Array(9).fill("");
+  ws_data[startRow][2] = capitalizeWords(document.getElementById('formName').value);
+  for(let i=3;i<=8;i++) ws_data[startRow][i] = null;
+  startRow++;
+  ws_data[startRow] = Array(9).fill("");
+  ws_data[startRow][2] = document.getElementById('formDate').value;
+  for(let i=3;i<=8;i++) ws_data[startRow][i] = null;
+  startRow++;
+  ws_data[startRow] = Array(9).fill("");
+  ws_data[startRow][2] = document.getElementById('formDesc').value;
+  for(let i=3;i<=8;i++) ws_data[startRow][i] = null;
+  startRow++;
+  for(let i=1; i<=tableCount; i++) {
+    const tableName = document.getElementById(`tableName${i}`);
+    if(tableName) {
+      ws_data[startRow] = Array(9).fill("");
+      ws_data[startRow][2] = capitalizeWords(tableName.value);
+      for(let j=3;j<=8;j++) ws_data[startRow][j] = null;
+      startRow++;
+      ws_data[startRow] = Array(9).fill("");
+      ws_data[startRow][2] = "No.";
+      ws_data[startRow][3] = "Description";
+      ws_data[startRow][4] = "Qty";
+      ws_data[startRow][5] = "Satuan";
+      ws_data[startRow][6] = "Harga Satuan";
+      ws_data[startRow][7] = "Harga Total";
+      ws_data[startRow][8] = "Beli ke";
+      startRow++;
+      const table = document.getElementById(`table${i}`);
+      const tbody = table.querySelector('tbody');
+      Array.from(tbody.rows).forEach((row, idx) => {
+        const cells = row.querySelectorAll('input');
+        const qty = parseFloat(cells[1].value) || 0;
+        const harga = parseFloat(cells[3].value) || 0;
+        ws_data[startRow] = Array(9).fill("");
+        ws_data[startRow][2] = idx + 1;
+        ws_data[startRow][3] = cells[0].value;
+        ws_data[startRow][4] = cells[1].value;
+        ws_data[startRow][5] = cells[2].value;
+        ws_data[startRow][6] = cells[3].value;
+        ws_data[startRow][7] = qty * harga;
+        ws_data[startRow][8] = cells[5].value;
+        startRow++;
+      });
+    }
+    startRow++;
+  }
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  let mergeRanges = [];
+  let rowIdx = 5;
+  // Center & Bold untuk Form Name, Date, Desc, Table Name
+  mergeRanges.push({s:{r:rowIdx,c:2}, e:{r:rowIdx,c:8}}); ws[`C${rowIdx+1}`].s = ws[`C${rowIdx+1}`].s || {}; ws[`C${rowIdx+1}`].s.font = {bold:true}; ws[`C${rowIdx+1}`].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[`C${rowIdx+1}`].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; ws['!rows'] = ws['!rows'] || []; ws['!rows'][rowIdx] = {hpt:18.75}; rowIdx++;
+  mergeRanges.push({s:{r:rowIdx,c:2}, e:{r:rowIdx,c:8}}); ws[`C${rowIdx+1}`].s = ws[`C${rowIdx+1}`].s || {}; ws[`C${rowIdx+1}`].s.font = {bold:true}; ws[`C${rowIdx+1}`].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[`C${rowIdx+1}`].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; ws['!rows'][rowIdx] = {hpt:18.75}; rowIdx++;
+  mergeRanges.push({s:{r:rowIdx,c:2}, e:{r:rowIdx,c:8}}); ws[`C${rowIdx+1}`].s = ws[`C${rowIdx+1}`].s || {}; ws[`C${rowIdx+1}`].s.font = {bold:true}; ws[`C${rowIdx+1}`].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[`C${rowIdx+1}`].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; ws['!rows'][rowIdx] = {hpt:37.5}; rowIdx++;
+  for(let i=1; i<=tableCount; i++) {
+    mergeRanges.push({s:{r:rowIdx,c:2}, e:{r:rowIdx,c:8}}); ws[`C${rowIdx+1}`].s = ws[`C${rowIdx+1}`].s || {}; ws[`C${rowIdx+1}`].s.font = {bold:true}; ws[`C${rowIdx+1}`].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[`C${rowIdx+1}`].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; ws['!rows'][rowIdx] = {hpt:18.75}; rowIdx++;
+    for(let c=2;c<=8;c++) { ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s = ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s || {}; ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s.font = {bold:true}; ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; } ws['!rows'][rowIdx] = {hpt:18.75}; rowIdx++;
+    const table = document.getElementById(`table${i}`); const tbody = table.querySelector('tbody'); Array.from(tbody.rows).forEach((row, idx2) => { for(let c=2;c<=8;c++) { ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s = ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s || {}; ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s.alignment = {wrapText:true, vertical:'center', horizontal:'center'}; ws[XLSX.utils.encode_cell({r:rowIdx,c:c})].s.border = {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}}; } ws['!rows'][rowIdx] = {hpt:15.75}; rowIdx++; }); rowIdx++;
+  }
+  ws['!merges'] = mergeRanges;
+  ws['!cols'] = [null, null, {wch:5.63}, {wch:41.88}, {wch:6.25}, {wch:6.25}, {wch:15.00}, {wch:15.00}, {wch:15.00}];
+  ws['!autofilter'] = undefined;
+  ws['!outline'] = undefined;
+  ws['!displayGridlines'] = false;
+  XLSX.utils.book_append_sheet(wb, ws, "Pengajuan Forum");
+  XLSX.writeFile(wb, "Pengajuan_Forum.xlsx");
+}
+addTable();
+</script>
+</body>
+</html>
